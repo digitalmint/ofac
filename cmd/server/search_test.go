@@ -174,6 +174,20 @@ var (
 	}
 )
 
+func TestBrobits(t *testing.T) {
+	cases := []struct {
+		s1, s2 string
+		match  float64
+	}{
+		{"dariana lowe", "DARIAN, Tenny", 0.942},
+	}
+	for i := range cases {
+		v := cases[i]
+		// Only need to call chomp on s1, see jaroWinkler doc
+		eql(t, fmt.Sprintf("#%d %s vs %s", i, v.s1, v.s2), jaroWinkler(v.s1, v.s2), v.match)
+	}
+}
+
 func TestJaroWinkler(t *testing.T) {
 	cases := []struct {
 		s1, s2 string
@@ -567,6 +581,23 @@ func TestSearch__extractIDFromRemark(t *testing.T) {
 		result := extractIDFromRemark(cases[i].input)
 		if cases[i].expected != result {
 			t.Errorf("input=%s expected=%s result=%s", cases[i].input, cases[i].expected, result)
+		}
+	}
+}
+
+func TestSearch__extractAKAsFromRemark(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected []string
+	}{
+		{"DOB 13 Jan 1967; alt. DOB 13 Jan 1970; POB Dushanbe, Tajikistan; Dealer and transporter of weapons and minerals; Owner, Great Lakes Business Company and Compagnie Aerienne des Grands; a.k.a. 'BONT'; a.k.a. 'BOUTOV'; a.k.a. 'BUTT'; a.k.a. 'BUTTE'.", []string{"bont", "boutov", "butt", "butte"}},
+	}
+	for i := range cases {
+		results := extractAKAsFromRemark(cases[i].input)
+		for n, result := range results {
+			if cases[i].expected[n] != result {
+				t.Errorf("input=%s expected=%s result=%s", cases[i].input, cases[i].expected[n], result)
+			}
 		}
 	}
 }
