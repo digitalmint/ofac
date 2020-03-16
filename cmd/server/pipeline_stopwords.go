@@ -1,4 +1,4 @@
-// Copyright 2019 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -29,6 +29,20 @@ var (
 		return keep
 	}(os.Getenv("KEEP_STOPWORDS"))
 )
+
+type stopwordsStep struct {
+}
+
+func (s *stopwordsStep) apply(in *Name) error {
+	switch {
+	case in.sdn != nil && !strings.EqualFold(in.sdn.SDNType, "individual"):
+		in.Processed = removeStopwords(in.Processed, detectLanguage(in.Processed, in.addrs))
+
+	case in.ssi != nil && !strings.EqualFold(in.ssi.Type, "individual"):
+		in.Processed = removeStopwords(in.Processed, detectLanguage(in.Processed, nil))
+	}
+	return nil
+}
 
 func removeStopwords(in string, lang whatlanggo.Lang) string {
 	if keepStopwords {

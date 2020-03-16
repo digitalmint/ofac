@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -37,6 +37,7 @@ var (
 				Country:                     "Haiti",
 			},
 		}),
+		pipe: noLogPipeliner,
 	}
 	altSearcher = &searcher{
 		Alts: precomputeAlts([]*ofac.AlternateIdentity{
@@ -53,6 +54,7 @@ var (
 				AlternateName: "A.I.C. SOGO KENKYUSHO",
 			},
 		}),
+		pipe: noLogPipeliner,
 	}
 	sdnSearcher = &searcher{
 		SDNs: precomputeSDNs([]*ofac.SDN{
@@ -72,7 +74,8 @@ var (
 				Title:    "Secretary General of DEMOCRATIC FRONT FOR THE LIBERATION OF PALESTINE - HAWATMEH FACTION",
 				Remarks:  "DOB 1933; Secretary General of DEMOCRATIC FRONT FOR THE LIBERATION OF PALESTINE - HAWATMEH FACTION.",
 			},
-		}, nil),
+		}, nil, noLogPipeliner),
+		pipe: noLogPipeliner,
 	}
 	idSearcher = &searcher{
 		SDNs: precomputeSDNs([]*ofac.SDN{
@@ -84,7 +87,8 @@ var (
 				Title:    "President of the Bolivarian Republic of Venezuela",
 				Remarks:  "DOB 23 Nov 1962; POB Caracas, Venezuela; citizen Venezuela; Gender Male; Cedula No. 5892464 (Venezuela); President of the Bolivarian Republic of Venezuela.",
 			},
-		}, nil),
+		}, nil, noLogPipeliner),
+		pipe: noLogPipeliner,
 	}
 	dplSearcher = &searcher{
 		DPs: precomputeDPs([]*dpl.DPL{
@@ -116,7 +120,8 @@ var (
 				Action:         "STANDARD ORDER",
 				FRCitation:     "67 F.R. 7354 2/19/02 66 F.R. 48998 9/25/01 62 F.R. 26471 5/14/97 62 F.R. 34688 6/27/97 62 F.R. 60063 11/6/97 63 F.R. 25817 5/11/98 63 F.R. 58707 11/2/98 64 F.R. 23049 4/29/99",
 			},
-		}),
+		}, noLogPipeliner),
+		pipe: noLogPipeliner,
 	}
 	ssiSearcher = &searcher{
 		SSIs: precomputeSSIs([]*csl.SSI{
@@ -144,7 +149,8 @@ var (
 				SourceListURL:  "http://bit.ly/1QWTIfE",
 				SourceInfoURL:  "http://bit.ly/1MLgou0",
 			},
-		}),
+		}, noLogPipeliner),
+		pipe: noLogPipeliner,
 	}
 	bisEntitySearcher = &searcher{
 		BISEntities: precomputeBISEntities([]*csl.EL{
@@ -170,7 +176,8 @@ var (
 				SourceListURL:      "http://bit.ly/1L47xrV",
 				SourceInfoURL:      "http://bit.ly/1L47xrV",
 			},
-		}),
+		}, noLogPipeliner),
+		pipe: noLogPipeliner,
 	}
 )
 
@@ -254,47 +261,6 @@ func TestEql(t *testing.T) {
 	eql(t, "", 0.0001, 0.00002)
 }
 
-// TestSearch_precompute ensures we are trimming and UTF-8 normalizing strings
-// as expected. This is needed since our datafiles are normalized for us.
-func TestSearch_precompute(t *testing.T) {
-	cases := []struct {
-		input, expected string
-	}{
-		{"nicolás maduro", "nicolas maduro"},
-		{"Delcy Rodríguez", "delcy rodriguez"},
-		{"Raúl Castro", "raul castro"},
-	}
-	for i := range cases {
-		guess := precompute(cases[i].input)
-		if guess != cases[i].expected {
-			t.Errorf("precompute(%q)=%q expected %q", cases[i].input, guess, cases[i].expected)
-		}
-	}
-}
-
-func TestSearch_reorderSDNName(t *testing.T) {
-	cases := []struct {
-		input, expected string
-	}{
-		{"Jane Doe", "Jane Doe"}, // no change, control (without commas)
-		{"Doe Other, Jane", "Jane Doe Other"},
-		{"Last, First Middle", "First Middle Last"},
-		{"FELIX B. MADURO S.A.", "FELIX B. MADURO S.A."}, // keep .'s in a name
-		{"MADURO MOROS, Nicolas", "Nicolas MADURO MOROS"},
-		{"IBRAHIM, Sadr", "Sadr IBRAHIM"},
-		{"AL ZAWAHIRI, Dr. Ayman", "Dr. Ayman AL ZAWAHIRI"},
-		// Issue 115
-		{"Bush, George W", "George W Bush"},
-		{"RIZO MORENO, Jorge Luis", "Jorge Luis RIZO MORENO"},
-	}
-	for i := range cases {
-		guess := reorderSDNName(cases[i].input, "individual")
-		if guess != cases[i].expected {
-			t.Errorf("reorderSDNName(%q)=%q expected %q", cases[i].input, guess, cases[i].expected)
-		}
-	}
-}
-
 // TestSearch_liveData will download the real data and run searches against the corpus.
 // This test is designed to tweak match percents and results.
 func TestSearch_liveData(t *testing.T) {
@@ -303,6 +269,7 @@ func TestSearch_liveData(t *testing.T) {
 	}
 	searcher := &searcher{
 		logger: log.NewNopLogger(),
+		pipe:   noLogPipeliner,
 	}
 	if stats, err := searcher.refreshData(""); err != nil {
 		t.Fatal(err)
@@ -526,8 +493,8 @@ func TestSearcher_TopSSIs_reportAltNameWeight(t *testing.T) {
 	if ssis[0].SectoralSanction.EntityID != "18782" {
 		t.Errorf("%f - %#v", ssis[0].match, ssis[0].SectoralSanction)
 	}
-	if ssis[0].match != 1 {
-		t.Errorf("Expected match=1 for alt names: %f - %#v", ssis[0].match, ssis[0].SectoralSanction)
+	if math.Abs(1.0-ssis[0].match) > 0.001 {
+		t.Errorf("Expected match=1.0 for alt names: %f - %#v", ssis[0].match, ssis[0].SectoralSanction)
 	}
 }
 
@@ -549,8 +516,8 @@ func TestSearcher_TopBISEntities_AltName(t *testing.T) {
 	if els[0].Entity.Name != "Luqman Yasin Yunus Shgragi" {
 		t.Errorf("%#v", els[0].Entity)
 	}
-	if els[0].match != 1 {
-		t.Errorf("Expected match=1 for alt names: %f - %#v", els[0].match, els[0].Entity)
+	if math.Abs(1.0-els[0].match) > 0.001 {
+		t.Errorf("Expected match=1.0 for alt names: %f - %#v", els[0].match, els[0].Entity)
 	}
 }
 
@@ -576,6 +543,7 @@ func TestSearch__extractIDFromRemark(t *testing.T) {
 		{"Telephone No. 009613679153;", "009613679153"},
 		{"Tax ID No. AABA 670850 Y.", "AABA 670850"},
 		{"Phone No. 263-4-486946; Fax No. 263-4-487261.", "263-4-486946"},
+		{"D-U-N-S Number 56-558-7594; V.A.T. Number MT15388917 (Malta); Trade License No. C 24129 (Malta); Company Number 4220856; Linked To: DEBONO, Darren.", "C 24129"}, // SDN 23410
 	}
 	for i := range cases {
 		result := extractIDFromRemark(cases[i].input)
@@ -599,5 +567,71 @@ func TestSearch__extractAKAsFromRemark(t *testing.T) {
 				t.Errorf("input=%s expected=%s result=%s", cases[i].input, cases[i].expected[n], result)
 			}
 		}
+	}
+}
+
+func TestSearch__FindSDNsByRemarksID(t *testing.T) {
+	s := &searcher{
+		SDNs: []*SDN{
+			{
+				SDN: &ofac.SDN{
+					EntityID: "22790",
+				},
+				id: "Cedula No. C 5892464 (Venezuela);",
+			},
+			{
+				SDN: &ofac.SDN{
+					EntityID: "99999",
+				},
+				id: "Other",
+			},
+		},
+	}
+
+	sdns := s.FindSDNsByRemarksID(1, "5892464")
+	if len(sdns) != 1 {
+		t.Fatalf("sdns=%#v", sdns)
+	}
+	if sdns[0].EntityID != "22790" {
+		t.Errorf("sdns[0].EntityID=%v", sdns[0].EntityID)
+	}
+
+	// successful multi-part match
+	s.SDNs[0].id = "2456 7890"
+	sdns = s.FindSDNsByRemarksID(1, "2456 7890")
+	if len(sdns) != 1 {
+		t.Fatalf("sdns=%#v", sdns)
+	}
+	if sdns[0].EntityID != "22790" {
+		t.Errorf("sdns[0].EntityID=%v", sdns[0].EntityID)
+	}
+
+	// incomplete query (not enough numerical query parts)
+	sdns = s.FindSDNsByRemarksID(1, "2456")
+	if len(sdns) != 0 {
+		t.Fatalf("sdns=%#v", sdns)
+	}
+	sdns = s.FindSDNsByRemarksID(1, "7890")
+	if len(sdns) != 0 {
+		t.Fatalf("sdns=%#v", sdns)
+	}
+
+	// query doesn't match
+	sdns = s.FindSDNsByRemarksID(1, "12456")
+	if len(sdns) != 0 {
+		t.Fatalf("sdns=%#v", sdns)
+	}
+
+	// empty SDN remarks ID
+	s.SDNs[0].id = ""
+	sdns = s.FindSDNsByRemarksID(1, "12456")
+	if len(sdns) != 0 {
+		t.Fatalf("sdns=%#v", sdns)
+	}
+
+	// empty query
+	sdns = s.FindSDNsByRemarksID(1, "")
+	if len(sdns) != 0 {
+		t.Fatalf("sdns=%#v", sdns)
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -11,13 +11,11 @@ import (
 	"fmt"
 	lg "log"
 	"net/http"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/moov-io/watchman/pkg/csl"
 	"github.com/moov-io/watchman/pkg/dpl"
@@ -25,9 +23,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/xrash/smetrics"
-	"golang.org/x/text/runes"
-	"golang.org/x/text/transform"
-	"golang.org/x/text/unicode/norm"
 )
 
 var (
@@ -52,6 +47,8 @@ type searcher struct {
 	// metadata
 	lastRefreshedAt time.Time
 	sync.RWMutex    // protects all above fields
+
+	pipe *pipeliner
 
 	logger log.Logger
 }
@@ -212,12 +209,19 @@ func (s *searcher) TopAltNames(limit int, alt string) []Alt {
 }
 
 func (s *searcher) FindSDN(entityID string) *ofac.SDN {
+	if sdn := s.debugSDN(entityID); sdn != nil {
+		return sdn.SDN
+	}
+	return nil
+}
+
+func (s *searcher) debugSDN(entityID string) *SDN {
 	s.RLock()
 	defer s.RUnlock()
 
 	for i := range s.SDNs {
 		if s.SDNs[i].EntityID == entityID {
-			return s.SDNs[i].SDN
+			return s.SDNs[i]
 		}
 	}
 	return nil
@@ -227,21 +231,48 @@ func (s *searcher) FindSDN(entityID string) *ofac.SDN {
 // what is provided to this function. It's typically used with values assigned by a local
 // government. (National ID, Drivers License, etc)
 func (s *searcher) FindSDNsByRemarksID(limit int, id string) []SDN {
+	if id == "" {
+		return nil
+	}
+
 	var out []SDN
 	for i := range s.SDNs {
-		// If our remarks ID contains a space then just see if the query ID matches any part.
-		// Otherwise ID searches need to be exact matches.
-		if strings.Contains(s.SDNs[i].id, " ") && strings.Contains(s.SDNs[i].id, id) {
-			sdn := *s.SDNs[i]
-			sdn.match = 1.0
-			out = append(out, sdn)
+		// If the SDN's remarks ID contains a space then we need to ensure "all the numeric
+		// parts have to exactly match" between our query and the parsed ID.
+		if strings.Contains(s.SDNs[i].id, " ") {
+			qParts := strings.Fields(id)
+			sdnParts := strings.Fields(s.SDNs[i].id)
+
+			matched, expected := 0, 0
+			for j := range sdnParts {
+				if n, _ := strconv.ParseInt(sdnParts[j], 10, 64); n > 0 {
+					// This part of the SDN's remarks is a number so it must exactly
+					// match to a query's part
+					expected += 1
+
+					for k := range qParts {
+						if sdnParts[j] == qParts[k] {
+							matched += 1
+						}
+					}
+				}
+			}
+
+			// If all the numeric parts match between query and SDN return the match
+			if matched == expected {
+				sdn := *s.SDNs[i]
+				sdn.match = 1.0
+				out = append(out, sdn)
+			}
 		} else {
+			// The query and remarks ID must exactly match
 			if s.SDNs[i].id == id {
 				sdn := *s.SDNs[i]
 				sdn.match = 1.0
 				out = append(out, sdn)
 			}
 		}
+
 		// quit if we're at our max result size
 		if len(out) >= limit {
 			return out
@@ -533,46 +564,24 @@ func findAddresses(entityID string, addrs []*ofac.Address) []*ofac.Address {
 	return out
 }
 
-func precomputeSDNs(sdns []*ofac.SDN, addrs []*ofac.Address) []*SDN {
+func precomputeSDNs(sdns []*ofac.SDN, addrs []*ofac.Address, pipe *pipeliner) []*SDN {
 	out := make([]*SDN, len(sdns))
 	for i := range sdns {
-		name := reorderSDNName(sdns[i].SDNName, sdns[i].SDNType)
-		if !strings.EqualFold(sdns[i].SDNType, "individual") {
-			// Never remove stopwords for an individual (aka person)
-			name = removeStopwords(name, detectLanguage(name, findAddresses(sdns[i].EntityID, addrs)))
+		nn := sdnName(sdns[i], findAddresses(sdns[i].EntityID, addrs))
+
+		if err := pipe.Do(nn); err != nil {
+			pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining SDN: %v", err))
+			continue
 		}
-		name = precompute(name)
 
 		out[i] = &SDN{
 			SDN:  sdns[i],
-			name: name,
+			name: nn.Processed,
 			id:   extractIDFromRemark(strings.TrimSpace(sdns[i].Remarks)),
 			aka:  extractAKAsFromRemark(strings.TrimSpace(sdns[i].Remarks)),
 		}
 	}
 	return out
-}
-
-var (
-	surnamePrecedes = regexp.MustCompile(`(,?[\s?a-zA-Z\.]{1,})$`)
-)
-
-// reorderSDNName will take a given SDN name and if it matches a specific pattern where
-// the first name is placed after the last name (surname) to return a string where the first name
-// preceedes the last.
-//
-// Example:
-// SDN EntityID: 19147 has 'FELIX B. MADURO S.A.'
-// SDN EntityID: 22790 has 'MADURO MOROS, Nicolas'
-func reorderSDNName(name string, tpe string) string {
-	if !strings.EqualFold(tpe, "individual") {
-		return name // only reorder individual names
-	}
-	v := surnamePrecedes.FindString(name)
-	if v == "" {
-		return name // no match on 'Doe, John'
-	}
-	return strings.TrimSpace(fmt.Sprintf("%s %s", strings.TrimPrefix(v, ","), strings.TrimSuffix(name, v)))
 }
 
 // Address is ofac.Address wrapped with precomputed search metadata
@@ -673,13 +682,17 @@ func (d DP) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func precomputeDPs(persons []*dpl.DPL) []*DP {
+func precomputeDPs(persons []*dpl.DPL, pipe *pipeliner) []*DP {
 	out := make([]*DP, len(persons))
 	for i := range persons {
-		name := removeStopwords(persons[i].Name, detectLanguage(persons[i].Name, nil))
+		nn := dpName(persons[i])
+		if err := pipe.Do(nn); err != nil {
+			pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining DP: %v", err))
+			continue
+		}
 		out[i] = &DP{
 			DeniedPerson: persons[i],
-			name:         precompute(name),
+			name:         nn.Processed,
 		}
 	}
 	return out
@@ -701,22 +714,30 @@ func (s SSI) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func precomputeSSIs(ssis []*csl.SSI) []*SSI {
+func precomputeSSIs(ssis []*csl.SSI, pipe *pipeliner) []*SSI {
 	out := make([]*SSI, len(ssis))
 	for i, ssi := range ssis {
-		out[i] = &SSI{SectoralSanction: ssi}
-
-		var normalizedAltNames []string
-		for _, name := range ssi.AlternateNames {
-			name = reorderSDNName(name, ssi.Type)
-			name = removeStopwords(name, detectLanguage(name, nil))
-			normalizedAltNames = append(normalizedAltNames, name)
-
-			if !strings.EqualFold(ssi.Type, "individual") {
-				out[i].name = precompute(name)
-			}
+		nn := ssiName(ssi)
+		if err := pipe.Do(nn); err != nil {
+			pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining SSI: %v", err))
+			continue
 		}
-		ssi.AlternateNames = normalizedAltNames
+
+		var altNames []string
+		for i := range ssi.AlternateNames {
+			altNN := &Name{Processed: ssi.AlternateNames[i]}
+			if err := pipe.Do(altNN); err != nil {
+				pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining alt: %v", err))
+				continue
+			}
+			altNames = append(altNames, altNN.Processed)
+		}
+		ssi.AlternateNames = altNames
+
+		out[i] = &SSI{
+			SectoralSanction: ssi,
+			name:             nn.Processed,
+		}
 	}
 	return out
 }
@@ -737,39 +758,32 @@ func (e BISEntity) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func precomputeBISEntities(els []*csl.EL) []*BISEntity {
+func precomputeBISEntities(els []*csl.EL, pipe *pipeliner) []*BISEntity {
 	out := make([]*BISEntity, len(els))
 	for i, el := range els {
-		var normalizedAltNames []string
-		for _, name := range el.AlternateNames {
-			normalizedAltNames = append(normalizedAltNames, precompute(name))
+		nn := bisEntityName(el)
+		if err := pipe.Do(nn); err != nil {
+			pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining EL: %v", err))
+			continue
 		}
-		el.AlternateNames = normalizedAltNames
+
+		var altNames []string
+		for i := range el.AlternateNames {
+			altNN := &Name{Processed: el.AlternateNames[i]}
+			if err := pipe.Do(altNN); err != nil {
+				pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining alt: %v", err))
+				continue
+			}
+			altNames = append(altNames, altNN.Processed)
+		}
+		el.AlternateNames = altNames
+
 		out[i] = &BISEntity{
 			Entity: el,
-			name:   precompute(removeStopwords(el.Name, detectLanguage(el.Name, nil))),
+			name:   nn.Processed,
 		}
 	}
 	return out
-}
-
-var (
-	punctuationReplacer = strings.NewReplacer(".", "", ",", "", "-", "", "  ", " ")
-)
-
-// precompute will lowercase each substring and remove punctuation
-//
-// This function is called on every record from the flat files and all
-// search requests (i.e. HTTP and searcher.TopNNNs methods).
-// See: https://godoc.org/golang.org/x/text/unicode/norm#Form
-// See: https://withblue.ink/2019/03/11/why-you-need-to-normalize-unicode-strings.html
-func precompute(s string) string {
-	trimmed := strings.ToLower(punctuationReplacer.Replace(s))
-
-	// UTF-8 normalization
-	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC) // Mn: nonspacing marks
-	result, _, _ := transform.String(t, trimmed)
-	return result
 }
 
 func extractSearchLimit(r *http.Request) int {

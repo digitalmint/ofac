@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -33,7 +33,7 @@ var (
 				Title:    "",
 				Remarks:  "a.k.a. 'BNC'.",
 			},
-		}, nil),
+		}, nil, noLogPipeliner),
 		Addresses: precomputeAddresses([]*ofac.Address{
 			{
 				EntityID:                    "306",
@@ -51,6 +51,7 @@ var (
 				AlternateName: "NATIONAL BANK OF CUBA",
 			},
 		}),
+		pipe: noLogPipeliner,
 	}
 )
 
@@ -623,7 +624,7 @@ func TestCustomerRepository(t *testing.T) {
 			t.Error(err)
 		}
 		if status == nil {
-			t.Errorf("empty CustomerStatus")
+			t.Fatal("empty CustomerStatus")
 		}
 		if status.UserID == "" || string(status.Status) == "" {
 			t.Errorf("invalid CustomerStatus: %#v", status)
@@ -644,7 +645,7 @@ func TestCustomerRepository(t *testing.T) {
 			t.Error(err)
 		}
 		if status == nil {
-			t.Errorf("empty CustomerStatus")
+			t.Fatal("empty CustomerStatus")
 		}
 		if status.UserID == "" || string(status.Status) == "" {
 			t.Errorf("invalid CustomerStatus: %#v", status)

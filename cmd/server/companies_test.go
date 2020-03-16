@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -31,7 +31,7 @@ var (
 				Programs: []string{"SYRIA"},
 				Remarks:  "Linked To: MAKHLUF, Rami.",
 			},
-		}, nil),
+		}, nil, noLogPipeliner),
 		Addresses: precomputeAddresses([]*ofac.Address{
 			{
 				EntityID:                    "21206",
@@ -49,6 +49,7 @@ var (
 				AlternateName: "AL-HISN FIRM",
 			},
 		}),
+		pipe: noLogPipeliner,
 	}
 )
 
@@ -624,7 +625,7 @@ func TestCompanyRepository(t *testing.T) {
 			t.Error(err)
 		}
 		if status == nil {
-			t.Errorf("empty CompanyStatus")
+			t.Fatal("empty CompanyStatus")
 		}
 		if status.UserID == "" || string(status.Status) == "" {
 			t.Errorf("invalid CompanyStatus: %#v", status)
@@ -645,7 +646,7 @@ func TestCompanyRepository(t *testing.T) {
 			t.Error(err)
 		}
 		if status == nil {
-			t.Errorf("empty CompanyStatus")
+			t.Fatal("empty CompanyStatus")
 		}
 		if status.UserID == "" || string(status.Status) == "" {
 			t.Errorf("invalid CompanyStatus: %#v", status)

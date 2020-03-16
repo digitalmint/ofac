@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -34,6 +34,7 @@ func TestSearcher__refreshInterval(t *testing.T) {
 	// cover another branch
 	s := &searcher{
 		logger: log.NewNopLogger(),
+		pipe:   noLogPipeliner,
 	}
 	s.periodicDataRefresh(0*time.Second, nil, nil)
 }
@@ -43,7 +44,10 @@ func TestSearcher__refreshData_nonCSL(t *testing.T) {
 		return
 	}
 
-	s := &searcher{logger: log.NewNopLogger()}
+	s := &searcher{
+		logger: log.NewNopLogger(),
+		pipe:   noLogPipeliner,
+	}
 	stats, err := s.refreshData("")
 	if err != nil {
 		t.Fatal(err)

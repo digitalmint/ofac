@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -350,6 +350,7 @@ func searchByName(logger log.Logger, searcher *searcher, nameSlug string) http.H
 		json.NewEncoder(w).Encode(&searchResponse{
 			// OFAC
 			SDNs:              sdns,
+			AltNames:          searcher.TopAltNames(limit, nameSlug),
 			SectoralSanctions: searcher.TopSSIs(limit, nameSlug),
 			// BIS
 			DeniedPersons: searcher.TopDPs(limit, nameSlug),

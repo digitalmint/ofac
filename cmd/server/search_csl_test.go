@@ -3,20 +3,18 @@ package main
 import (
 	"testing"
 
-	"github.com/moov-io/watchman/pkg/csl"
-
 	"github.com/go-kit/kit/log"
 )
 
-// This file is for tests that depend on having a trade.gov API Key.
-// These tests should be skipped if the TRADEGOV_API_KEY environment variable is not set.
-
 func TestSearcher_refreshData_CSL(t *testing.T) {
-	if testing.Short() || csl.ApiKey == "" {
+	if testing.Short() {
 		return
 	}
 
-	s := &searcher{logger: log.NewNopLogger()}
+	s := &searcher{
+		logger: log.NewNopLogger(),
+		pipe:   noLogPipeliner,
+	}
 
 	stats, err := s.refreshData("")
 	if err != nil {

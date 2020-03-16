@@ -1,4 +1,50 @@
-## v0.13.0 (Unreleased)
+## v0.14.0 (Unreleased)
+
+ADDITIONS
+
+- cmd/server: record download counts per entity type in `last_data_refresh_count` Prometheus metric
+
+IMPROVEMENTS
+
+- pkg/csl: use endpoint to download which doesn't require an api key
+- build: run sonatype-nexus-community/nancy in CI
+- api,client: use shared Error model
+- admin,client: fix package names, upgrade openapi-generator to 4.2.3
+- download: set custom User-Agent header
+- all: misc test cleanup from staticcheck
+
+BUG FIXES
+
+- ofac: allow unescaped inner quotes in SDN comments records
+
+BUILD
+
+- build: upgrade to Go 1.14.x
+- build: upgrade staticcheck to 2020.1.3
+- build: don't 'make docker' twice
+- build: update Copyright headers for 2020
+- build: upgrade mysql client to 1.5
+- build: don't wipe both generated dirs on 'make clean'
+- chore(deps): update dependency @material-ui/core to v4.9.4
+- chore(deps): update golang docker tag to v1.14
+- chore(deps): update module moov-io/base to v0.11.0
+- chore(deps): update module prometheus/client_golang to v1.4.0
+- chore(deps): update mui monorepo to v4.9.1
+
+## v0.13.2 (Released 2020-03-03)
+
+IMPROVEMENTS
+
+- ofac: allow unescaped inner quotes in SDN comments records
+- ofac: add filename and more logging context for debugging refresh errors
+
+## v0.13.1 (Released 2020-01-28)
+
+IMPROVEMENTS
+
+- pkg/csl: use endpoint to download which doesn't require an api key
+
+## v0.13.0 (Released 2019-12-20)
 
 This project has been renamed to Moov Watchman (from Moov OFAC) to better represent coverage of multiple entity lists covering trade sanctions and regional compliance laws.
 
@@ -13,6 +59,9 @@ ADDITIONS
 - cmd/server: Add Sectoral Sanctions Identifications List via Consolidated Screening List (CSL)
 - cmd/server: Add Bureau of Industry and Security Entity List via Consolidated Screening List
 - cmd/server: Remove stopwords from OFAC SDN entity names, DP's, SSI, and BIS Entities
+- cmd/server: Remove company suffixes in indexed names (such as LLC, Co., LTDA.)
+- cmd/server: add admin route to debug indexed SDN information
+  - Example: `curl http://localhost:9094/debug/sdn/16016`
 
 IMPROVEMENTS
 
@@ -20,11 +69,19 @@ IMPROVEMENTS
 - cmd/server: add KEEP_STOPWORDS env config
 - pkg/ofac: clean up SDN programs when reading csv
 - cmd/server: handle an SDN's program list as an array in search, fixup UI values endpoint
+- cmd/server: add TopAltNames to searchByName
+- cmd/server: clarify shutdown logging
+- cmd/server: pipeline: trim spaces, split hyphenated words
+
+BUG FIXES
+
+- pkg/dpl: ignore first line of header information
+- cmd/server: match remark ID's exactly in all cases
 
 BUILD
 
 - fix(deps): update react monorepo to v16.12.0
-- chore(deps): update dependency @material-ui/core to v4.7.2
+- chore(deps): update dependency @material-ui/core to v4.8.0
 - build: upgrade openapi-generator to 4.2.2
 - fix(deps): update dependency react-scripts to v3.3.0
 

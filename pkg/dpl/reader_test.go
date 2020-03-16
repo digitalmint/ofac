@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -14,8 +14,8 @@ func TestDPL__read(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dpls) == 0 {
-		t.Errorf("no DPL records parsed")
+	if len(dpls) != 546 {
+		t.Errorf("found %d DPL records", len(dpls))
 	}
 
 	if _, err := Read(filepath.Join("..", "..", "test", "testdata", "sdn.csv")); err == nil {

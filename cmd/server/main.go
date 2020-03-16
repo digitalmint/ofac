@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -61,13 +62,13 @@ func main() {
 	go func() {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-		errs <- fmt.Errorf("%s", <-c)
+		errs <- fmt.Errorf("signal: %v", <-c)
 	}()
 
 	// Setup database connection
 	db, err := database.New(logger, os.Getenv("DATABASE_TYPE"))
 	if err != nil {
-		logger.Log("main", err)
+		logger.Log("main", fmt.Sprintf("database problem: %v", err))
 		os.Exit(1)
 	}
 	defer func() {
@@ -119,12 +120,13 @@ func main() {
 
 	// Start Admin server (with Prometheus metrics)
 	adminServer := admin.NewServer(*adminAddr)
+	adminServer.AddVersionHandler(watchman.Version) // Setup 'GET /version'
 	go func() {
 		logger.Log("admin", fmt.Sprintf("listening on %s", adminServer.BindAddr()))
 		if err := adminServer.Listen(); err != nil {
 			err = fmt.Errorf("problem starting admin http: %v", err)
 			logger.Log("admin", err)
-			errs <- err
+			errs <- fmt.Errorf("admin shutdown: %v", err)
 		}
 	}()
 	defer adminServer.Shutdown()
@@ -133,10 +135,20 @@ func main() {
 	downloadRepo := &sqliteDownloadRepository{db, logger}
 	defer downloadRepo.close()
 
-	searcher := &searcher{logger: logger}
+	searcher := &searcher{
+		logger: logger,
+	}
+	if debug, err := strconv.ParseBool(os.Getenv("DEBUG_NAME_PIPELINE")); debug && err == nil {
+		searcher.pipe = newPipeliner(logger)
+	} else {
+		searcher.pipe = newPipeliner(log.NewNopLogger())
+	}
 
 	// Add manual data refresh endpoint
 	adminServer.AddHandler(manualRefreshPath, manualRefreshHandler(logger, searcher, downloadRepo))
+
+	// Add debug routes
+	adminServer.AddHandler(debugSDNPath, debugSDNHandler(logger, searcher))
 
 	// Initial download of data
 	if stats, err := searcher.refreshData(os.Getenv("INITIAL_DATA_DIRECTORY")); err != nil {
@@ -188,12 +200,12 @@ func main() {
 		if certFile, keyFile := os.Getenv("HTTPS_CERT_FILE"), os.Getenv("HTTPS_KEY_FILE"); certFile != "" && keyFile != "" {
 			logger.Log("startup", fmt.Sprintf("binding to %s for secure HTTP server", *httpAddr))
 			if err := serve.ListenAndServeTLS(certFile, keyFile); err != nil {
-				logger.Log("exit", err)
+				logger.Log("exit", fmt.Sprintf("https shutdown: %v", err))
 			}
 		} else {
 			logger.Log("startup", fmt.Sprintf("binding to %s for HTTP server", *httpAddr))
 			if err := serve.ListenAndServe(); err != nil {
-				logger.Log("exit", err)
+				logger.Log("exit", fmt.Sprintf("http shutdown: %v", err))
 			}
 		}
 	}()
@@ -201,7 +213,7 @@ func main() {
 	// Block/Wait for an error
 	if err := <-errs; err != nil {
 		shutdownServer()
-		logger.Log("exit", err)
+		logger.Log("exit", fmt.Sprintf("final exit: %v", err))
 	}
 }
 

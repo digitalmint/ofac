@@ -23,17 +23,19 @@ All United States or European Union companies are required to comply with variou
 
 To get started using watchman download [the latest release](https://github.com/moov-io/watchman/releases/latest) or our [Docker image](https://hub.docker.com/r/moov/watchman/tags). We also have a [demo instance](https://moov.io/watchman/) as part of Moov's demo environment.
 
+Note: We also offer a `moov/watchman:static` Docker image with files from 2019. This image can be useful for faster local testing or consistent results.
+
 ```
 # Run as a binary
-$ wget https://github.com/moov-io/watchman/releases/download/v0.12.0/watchman-darwin-amd64
+$ wget https://github.com/moov-io/watchman/releases/download/v0.13.0/watchman-darwin-amd64
 $ chmod +x watchman-darwin-amd64
 $ ./watchman-darwin-amd64
-ts=2019-02-05T00:03:31.9583844Z caller=main.go:42 startup="Starting watchman server version v0.12.0"
+ts=2019-02-05T00:03:31.9583844Z caller=main.go:42 startup="Starting watchman server version v0.13.0"
 ...
 
 # Run as a Docker image
 $ docker run -p 8084:8084 -p 9094:9094 -it moov/watchman:latest
-ts=2019-02-05T00:03:31.9583844Z caller=main.go:42 startup="Starting watchman server version v0.12.0"
+ts=2019-02-05T00:03:31.9583844Z caller=main.go:42 startup="Starting watchman server version v0.13.0"
 ...
 
 # Perform a basic search
@@ -160,8 +162,8 @@ $ go run ./cmd/server/ # Load http://localhost:8084 in a web browser
 | `OFAC_DOWNLOAD_TEMPLATE` | HTTP address for downloading raw OFAC files. | `https://www.treasury.gov/ofac/downloads/%s` |
 | `DPL_DOWNLOAD_TEMPLATE` | HTTP address for downloading the DPL | `https://www.bis.doc.gov/dpl/%s` |
 | `CSL_DOWNLOAD_TEMPLATE` | HTTP address for downloading the Consolidated Screening List (CSL), which is a collection of US government sanctions lists. | `https://api.trade.gov/consolidated_screening_list/%s` |
-| `TRADEGOV_API_KEY` | REQUIRED for the CSL. API keys for api.trade.gov are free and can be obtained by [creating an account.](https://api.trade.gov/apps/store/) | N/A |
 | `KEEP_STOPWORDS` | Boolean to keep stopwords in names. | `false` |
+| `DEBUG_NAME_PIPELINE` | Boolean to pring debug messages for each name (SDN, SSI) processing step. | `false` |
 
 #### Storage
 
@@ -213,6 +215,7 @@ Moov Sanction Search supports sending a webhook periodically with a free-form na
 
 - `http_response_duration_seconds`: A Histogram of HTTP response timings
 - `last_data_refresh_success`: Unix timestamp of when data was last refreshed successfully
+- `last_data_refresh_count`: Count of records for a given sanction or entity list
 - `match_percentages` A Histogram which holds the match percentages with a label (`type`) of searches
    - `type`: Can be address, q, remarksID, name, altName
 - `mysql_connections`: How many MySQL connections and what status they're in.
@@ -221,6 +224,8 @@ Moov Sanction Search supports sending a webhook periodically with a free-form na
 ## Generating a Client
 
 We use [openapi-generator](https://github.com/OpenAPITools/openapi-generator) from the [OpenAPI team](https://swagger.io/specification/) to generate API clients for popular programming languages from the API specification. To generate the Go client run `make client` from Watchman's root directory.
+
+To generate the admin Go client run `make admin`.
 
 ## Getting Help
 
@@ -231,14 +236,14 @@ We maintain a [runbook for common issues](docs/runbook.md) and configuration opt
  [Project Documentation](https://docs.moov.io/) | Our project documentation available online.
  Google Group [moov-users](https://groups.google.com/forum/#!forum/moov-users)| The Moov users Google group is for contributors other people contributing to the Moov project. You can join them without a google account by sending an email to [moov-users+subscribe@googlegroups.com](mailto:moov-users+subscribe@googlegroups.com). After receiving the join-request message, you can simply reply to that to confirm the subscription.
 Twitter [@moov_io](https://twitter.com/moov_io)	| You can follow Moov.IO's Twitter feed to get updates on our project(s). You can also tweet us questions or just share blogs or stories.
-[GitHub Issue](https://github.com/moov-io) | If you are able to reproduce an problem please open a GitHub Issue under the specific project that caused the error.
-[moov-io slack](http://moov-io.slack.com/) | Join our slack channel to have an interactive discussion about the development of the project. [Request an invite to the slack channel](https://join.slack.com/t/moov-io/shared_invite/enQtNDE5NzIwNTYxODEwLTRkYTcyZDI5ZTlkZWRjMzlhMWVhMGZlOTZiOTk4MmM3MmRhZDY4OTJiMDVjOTE2MGEyNWYzYzY1MGMyMThiZjg)
+[GitHub Issue](https://github.com/moov-io) | If you are able to reproduce a problem please open a GitHub Issue under the specific project that caused the error.
+[moov-io slack](https://slack.moov.io/) | Join our slack channel to have an interactive discussion about the development of the project.
 
 ## Contributing
 
-Yes please! Please review our [Contributing guide](CONTRIBUTING.md) and [Code of Conduct](https://github.com/moov-io/ach/blob/master/CODE_OF_CONDUCT.md) to get started!
+Yes please! Please review our [Contributing guide](CONTRIBUTING.md) and [Code of Conduct](https://github.com/moov-io/ach/blob/master/CODE_OF_CONDUCT.md) to get started! Checkout our [issues for first time contributors](https://github.com/moov-io/watchman/contribute) for something to help out with.
 
-Note: This project uses Go Modules, which requires Go 1.11 or higher, but we ship the vendor directory in our repository.
+This project uses [Go Modules](https://github.com/golang/go/wiki/Modules) and uses Go 1.14 or higher. See [Golang's install instructions](https://golang.org/doc/install) for help setting up Go. You can download the source code and we offer [tagged and released versions](https://github.com/moov-io/watchman/releases/latest) as well. We highly recommend you use a tagged release for production.
 
 ## Links
 

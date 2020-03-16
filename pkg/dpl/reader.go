@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -32,6 +32,10 @@ func Read(path string) ([]*DPL, error) {
 
 	var out []*DPL
 	for _, txtLine := range lines {
+		if txtLine[1] == "Street_Address" {
+			continue // skip the headers
+		}
+
 		deniedPerson := &DPL{
 			Name:           txtLine[0],
 			StreetAddress:  txtLine[1],

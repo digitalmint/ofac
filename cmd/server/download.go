@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -28,10 +28,16 @@ var (
 		Name: "last_data_refresh_success",
 		Help: "Unix timestamp of when data was last refreshed successfully",
 	}, nil)
+
+	lastDataRefreshCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "last_data_refresh_count",
+		Help: "Count of records for a given sanction or entity list",
+	}, []string{"source"})
 )
 
 func init() {
 	prometheus.MustRegister(lastDataRefreshSuccess)
+	prometheus.MustRegister(lastDataRefreshCount)
 }
 
 // Download holds counts for each type of list data parsed from files and a
@@ -95,7 +101,7 @@ func (s *searcher) periodicDataRefresh(interval time.Duration, downloadRepo down
 func ofacRecords(logger log.Logger, initialDir string) (*ofac.Results, error) {
 	files, err := ofac.Download(logger, initialDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("download: %v", err)
 	}
 	if len(files) == 0 {
 		return nil, errors.New("no OFAC Results")
@@ -107,12 +113,12 @@ func ofacRecords(logger log.Logger, initialDir string) (*ofac.Results, error) {
 		if i == 0 {
 			res, err = ofac.Read(files[i])
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("read: %v", err)
 			}
 		} else {
 			rr, err := ofac.Read(files[i])
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("read and replace: %v", err)
 			}
 
 			res.Addresses = append(res.Addresses, rr.Addresses...)
@@ -151,30 +157,34 @@ func cslRecords(logger log.Logger, initialDir string) (*csl.CSL, error) {
 func (s *searcher) refreshData(initialDir string) (*downloadStats, error) {
 	if s.logger != nil {
 		s.logger.Log("download", "Starting refresh of data")
+
+		if initialDir != "" {
+			s.logger.Log("download", fmt.Sprintf("reading files from %s", initialDir))
+		}
 	}
 
 	results, err := ofacRecords(s.logger, initialDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("OFAC records: %v", err)
 	}
 
-	sdns := precomputeSDNs(results.SDNs, results.Addresses)
+	sdns := precomputeSDNs(results.SDNs, results.Addresses, s.pipe)
 	adds := precomputeAddresses(results.Addresses)
 	alts := precomputeAlts(results.AlternateIdentities)
 	linkSDNAlts(sdns, alts)
 
 	deniedPersons, err := dplRecords(s.logger, initialDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("DPL records: %v", err)
 	}
-	dps := precomputeDPs(deniedPersons)
+	dps := precomputeDPs(deniedPersons, s.pipe)
 
 	consolidatedLists, err := cslRecords(s.logger, initialDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("CSL records: %v", err)
 	}
-	ssis := precomputeSSIs(consolidatedLists.SSIs)
-	els := precomputeBISEntities(consolidatedLists.ELs)
+	ssis := precomputeSSIs(consolidatedLists.SSIs, s.pipe)
+	els := precomputeBISEntities(consolidatedLists.ELs, s.pipe)
 
 	stats := &downloadStats{
 		// OFAC
@@ -187,6 +197,12 @@ func (s *searcher) refreshData(initialDir string) (*downloadStats, error) {
 		DeniedPersons: len(dps),
 	}
 	stats.RefreshedAt = lastRefresh(initialDir)
+
+	// record prometheus metrics
+	lastDataRefreshCount.WithLabelValues("SDNs").Set(float64(len(sdns)))
+	lastDataRefreshCount.WithLabelValues("SSIs").Set(float64(len(ssis)))
+	lastDataRefreshCount.WithLabelValues("BISEntities").Set(float64(len(els)))
+	lastDataRefreshCount.WithLabelValues("DPs").Set(float64(len(dps)))
 
 	// Set new records after precomputation (to minimize lock contention)
 	s.Lock()

@@ -1,4 +1,4 @@
-// Copyright 2018 The Moov Authors
+// Copyright 2020 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -23,7 +23,10 @@ func TestDownload__manualRefreshPath(t *testing.T) {
 	}
 
 	check := func(t *testing.T, repo *sqliteDownloadRepository) {
-		searcher := &searcher{logger: log.NewNopLogger()}
+		searcher := &searcher{
+			logger: log.NewNopLogger(),
+			pipe:   noLogPipeliner,
+		}
 
 		w := httptest.NewRecorder()
 
